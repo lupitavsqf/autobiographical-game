@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Item Collector Adventure</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Bungee&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -28,7 +28,66 @@
 <script>
 
 // ============================================================
-// AUDIO ENGINE
+// BACKGROUND MUSIC ENGINE
+// ============================================================
+const Music = (() => {
+  let current = null;
+  let currentKey = null;
+  const HTMLAudio = window.HTMLAudioElement
+    ? (src) => { const a = document.createElement('audio'); a.src = src; return a; }
+    : null;
+
+  const tracks = {
+    home:  'bg_home.mp3',
+    farm:  'bg_farm.mp3',
+    mid:   'bg_2-5.mp3',
+    nyc:   'bg_6.mp3',
+  };
+
+  function keyForState(state, level) {
+    if (state === 'menu') return 'home';
+    if (state === 'gameOver' || state === 'win') return 'nyc';
+    if (level === 0) return 'farm';
+    if (level >= 1 && level <= 4) return 'mid';
+    if (level === 5) return 'nyc';
+    return 'home';
+  }
+
+  function play(key) {
+    if (key === currentKey && current && !current.paused) return;
+    stop();
+    currentKey = key;
+    if (!tracks[key] || !HTMLAudio) return;
+    try {
+      current = HTMLAudio(tracks[key]);
+      current.loop = true;
+      current.volume = 0.45;
+      // If the file is missing, onerror fires — just stay silent
+      current.onerror = () => { current = null; };
+      current.play().catch(() => {});
+    } catch(e) {
+      current = null;
+    }
+  }
+
+  function stop() {
+    if (current) {
+      try { current.pause(); current.currentTime = 0; } catch(e) {}
+      current = null;
+    }
+    currentKey = null;
+  }
+
+  function update(state, level) {
+    let key = keyForState(state, level);
+    play(key);
+  }
+
+  return { update, stop, play };
+})();
+
+// ============================================================
+// AUDIO ENGINE (SFX)
 // ============================================================
 const Audio = (() => {
   let ctx = null;
@@ -151,7 +210,7 @@ const Audio = (() => {
 // ============================================================
 // GAME CONSTANTS
 // ============================================================
-const FONT_SCALE = 0.5;
+const FONT_SCALE = 2;
 const CANVAS_W = 800;
 const CANVAS_H = 700;
 const HUD_H    = 72;
@@ -163,16 +222,15 @@ const COLS   = Math.floor(CANVAS_W / CELL);
 const ROWS   = Math.floor(GAME_H   / CELL);
 const WALL_T = 5;
 
-// Smooth movement: pixels per frame
-const PLAYER_SPEED = 3.5; // px/frame — adjust for taste
+const PLAYER_SPEED = 3.5;
 
 const LEVELS = [
-  { bg: 'farm',       char: 1, items: 6, label: 'The Farm'       },
-  { bg: 'highschool', char: 2, items: 7, label: 'High School'    },
-  { bg: 'lab',        char: 3, items: 6, label: 'The Lab'        },
-  { bg: 'office',     char: 4, items: 6, label: 'The Office'     },
-  { bg: 'china',      char: 5, items: 7, label: 'China'          },
-  { bg: 'nyc',        char: 6, items: 9, label: 'New York City', extra: true },
+  { bg: 'farm',       char: 1, items: 6,  label: 'The Farm',       life: 'CHILDHOOD',          location: 'FARM'          },
+  { bg: 'highschool', char: 2, items: 7,  label: 'High School',    life: 'TEENAGER',            location: 'HIGH SCHOOL'   },
+  { bg: 'lab',        char: 3, items: 6,  label: 'The Lab',        life: 'YOUNG ADULT',         location: 'UNDERGRADUATE' },
+  { bg: 'office',     char: 4, items: 6,  label: 'The Office',     life: 'YOUNG ADULT',         location: 'PROFESSIONAL LIFE' },
+  { bg: 'china',      char: 5, items: 7,  label: 'China',          life: 'SABBATICAL — LEARN AI', location: 'CHINA'       },
+  { bg: 'nyc',        char: 6, items: 9,  label: 'New York City',  life: 'GRADUATE LIFE',       location: 'NEW YORK CITY', extra: true },
 ];
 
 const BG_COLORS = [
@@ -210,7 +268,6 @@ function startImagePreload() {
     el.onerror = () => { rawImgs[key] = null; };
     el.src = src;
   }
-  // Special screen backgrounds
   load('bg_home',     'bg_home.png');
   load('bg_gameover', 'bg_gameover.png');
   load('bg_won',      'bg_won.png');
@@ -256,6 +313,12 @@ new p5(function(p) {
   let maze, player, items, apartment, cocktails, lives, warningTimer;
   let phase6 = 'apartment';
   let heartAnim = null;
+  // Level intro screen
+  let introTimer = 0;
+  const INTRO_DURATION = 180; // 3 seconds at 60fps
+
+  // Collected item thumbnails for HUD: array of {index, key, color, popAnim}
+  let collectedHUDItems = [];
 
   p.preload = function() {};
 
@@ -265,12 +328,15 @@ new p5(function(p) {
     p.imageMode(p.CENTER);
     p.textAlign(p.CENTER, p.CENTER);
     p.frameRate(60);
-    p.textFont('Press Start 2P');
+    p.textFont('Bungee');
   };
 
   p.draw = function() {
     p.background(30);
+    Music.update(state, level);
+
     if      (state === 'menu')       drawMenu();
+    else if (state === 'intro')      drawIntro();
     else if (state === 'warning')    drawWarning();
     else if (state === 'playing')    drawPlaying();
     else if (state === 'levelClear') drawLevelClear();
@@ -282,16 +348,12 @@ new p5(function(p) {
   // MENU
   // ============================================================
   function drawMenu() {
-    // Background image or fallback gradient
     if (!drawFullBg('bg_home')) {
       drawFancyBg(0);
-      // Dark overlay to make text readable
       p.fill(0, 0, 0, 140); p.noStroke(); p.rect(0, 0, CANVAS_W, CANVAS_H);
-      p.textFont('Bungee');
       p.fill(255);
       p.textSize(48 * FONT_SCALE);
       p.text('ITEM COLLECTOR', CANVAS_W/2, CANVAS_H/2 - 110);
-      p.textFont('Press Start 2P');
       p.fill(255);
       p.textSize(8 * FONT_SCALE);
       p.text('NAVIGATE THE LABYRINTH', CANVAS_W/2, CANVAS_H/2 - 58);
@@ -300,9 +362,73 @@ new p5(function(p) {
       p.textSize(7 * FONT_SCALE);
       p.text('ARROW KEYS OR WASD TO MOVE', CANVAS_W/2, CANVAS_H/2 - 6);
     }
-
-    // PLAY button — centered at bottom
     drawPrimaryButton('PLAY', CANVAS_W/2, CANVAS_H - 80, 180, 46, [60, 180, 80]);
+  }
+
+  // ============================================================
+  // LEVEL INTRO SCREEN
+  // ============================================================
+  function drawIntro() {
+    // Background: use level's bg image or colored bg
+    drawFancyBg(level);
+
+    // Dark overlay
+    p.fill(0, 0, 0, 180); p.noStroke(); p.rect(0, 0, CANVAS_W, CANVAS_H);
+
+    let lv = LEVELS[level];
+    let progress = introTimer / INTRO_DURATION;
+
+    // Slide-in animation: elements appear sequentially
+    let fade1 = Math.min(1, introTimer / 30);
+    let fade2 = Math.min(1, Math.max(0, (introTimer - 30) / 30));
+    let fade3 = Math.min(1, Math.max(0, (introTimer - 60) / 30));
+
+    // Level number — top accent
+    p.fill(255, 220, 80, 255 * fade1);
+    p.noStroke();
+    p.textSize(11 * FONT_SCALE);
+    p.text(`LEVEL ${level + 1}`, CANVAS_W/2, CANVAS_H/2 - 100);
+
+    // Decorative line
+    let lineW = 300 * fade1;
+    p.stroke(255, 220, 80, 180 * fade1);
+    p.strokeWeight(2);
+    p.line(CANVAS_W/2 - lineW/2, CANVAS_H/2 - 82, CANVAS_W/2 + lineW/2, CANVAS_H/2 - 82);
+    p.noStroke();
+
+    // Life stage (e.g. CHILDHOOD)
+    p.fill(180, 230, 255, 255 * fade2);
+    p.textSize(10 * FONT_SCALE);
+    p.text(lv.life, CANVAS_W/2, CANVAS_H/2 - 44);
+
+    // Location — big title
+    p.fill(255, 255, 255, 255 * fade3);
+    p.textSize(32 * FONT_SCALE);
+    // Slight scale pop on entry
+    let scl = 1 + (1 - fade3) * 0.15;
+    p.push();
+    p.translate(CANVAS_W/2, CANVAS_H/2 + 20);
+    p.scale(scl);
+    p.textAlign(p.CENTER, p.CENTER);
+    p.text(lv.location, 0, 0);
+    p.pop();
+
+    // Bottom countdown dots
+    let dots = Math.ceil((1 - progress) * 3);
+    p.fill(255, 255, 255, 120 * fade3);
+    p.textSize(9 * FONT_SCALE);
+    p.text('· '.repeat(dots).trim(), CANVAS_W/2, CANVAS_H/2 + 100);
+
+    introTimer++;
+    if (introTimer >= INTRO_DURATION) {
+      // For NYC level, show warning screen; otherwise go straight to playing
+      if (LEVELS[level].extra) {
+        warningTimer = 180;
+        state = 'warning';
+      } else {
+        state = 'playing';
+      }
+    }
   }
 
   // ============================================================
@@ -314,11 +440,9 @@ new p5(function(p) {
     p.fill(255, 50, 50, alpha);
     p.noStroke();
     p.textSize(26 * FONT_SCALE);
-    p.textStyle(p.BOLD);
     p.text('!! EXTRA HARD !!', CANVAS_W/2, CANVAS_H/2 - 60);
     p.fill(255, 200, 0);
     p.textSize(9 * FONT_SCALE);
-    p.textStyle(p.NORMAL);
     p.text('NEW YORK CITY',               CANVAS_W/2, CANVAS_H/2 - 10);
     p.text('WATCH OUT FOR $25 COCKTAILS!',CANVAS_W/2, CANVAS_H/2 + 18);
     p.fill(180, 180, 255);
@@ -370,9 +494,9 @@ new p5(function(p) {
   function drawLevelClear() {
     drawFancyBg(level);
     p.fill(0,0,0,160); p.noStroke(); p.rect(0,0,CANVAS_W,CANVAS_H);
-    p.fill(100,255,120); p.textSize(26 * FONT_SCALE); p.textStyle(p.BOLD);
+    p.fill(100,255,120); p.textSize(26 * FONT_SCALE);
     p.text('LEVEL CLEAR!', CANVAS_W/2, CANVAS_H/2-60);
-    p.fill(255); p.textSize(8 * FONT_SCALE); p.textStyle(p.NORMAL);
+    p.fill(255); p.textSize(8 * FONT_SCALE);
     p.text(LEVELS[level].label.toUpperCase(), CANVAS_W/2, CANVAS_H/2-10);
     p.text('ALL ITEMS COLLECTED!',            CANVAS_W/2, CANVAS_H/2+14);
     drawPrimaryButton('NEXT LEVEL >', CANVAS_W/2, CANVAS_H - 80, 220, 46, [60,180,80]);
@@ -384,9 +508,9 @@ new p5(function(p) {
   function drawGameOver() {
     if (!drawFullBg('bg_gameover')) {
       p.background(10);
-      p.fill(255,50,50); p.textSize(30 * FONT_SCALE); p.textStyle(p.BOLD);
+      p.fill(255,50,50); p.textSize(30 * FONT_SCALE);
       p.text('GAME OVER', CANVAS_W/2, CANVAS_H/2-70);
-      p.fill(255); p.textSize(8 * FONT_SCALE); p.textStyle(p.NORMAL);
+      p.fill(255); p.textSize(8 * FONT_SCALE);
       p.text('TOO MANY $25 COCKTAILS...', CANVAS_W/2, CANVAS_H/2-10);
     }
     drawPrimaryButton('HOME', CANVAS_W/2, CANVAS_H - 80, 180, 46, [140,30,30]);
@@ -400,9 +524,9 @@ new p5(function(p) {
       p.colorMode(p.HSB,360,100,100);
       p.background(p.frameCount%360,60,20);
       p.colorMode(p.RGB,255);
-      p.fill(255,220,50); p.textSize(30 * FONT_SCALE); p.textStyle(p.BOLD);
+      p.fill(255,220,50); p.textSize(30 * FONT_SCALE);
       p.text('YOU WIN!', CANVAS_W/2, CANVAS_H/2-80);
-      p.fill(255); p.textSize(9 * FONT_SCALE); p.textStyle(p.NORMAL);
+      p.fill(255); p.textSize(9 * FONT_SCALE);
       p.text('ALL 6 LEVELS CONQUERED!', CANVAS_W/2, CANVAS_H/2-20);
     }
     drawPrimaryButton('HOME', CANVAS_W/2, CANVAS_H - 80, 180, 46, [60,120,200]);
@@ -411,8 +535,6 @@ new p5(function(p) {
   // ============================================================
   // SHARED UI HELPERS
   // ============================================================
-
-  // Draw a full-canvas background image; returns true if drawn
   function drawFullBg(key) {
     if (!rawImgs[key]) return false;
     try {
@@ -421,25 +543,20 @@ new p5(function(p) {
     } catch(e) { return false; }
   }
 
-  // Reusable centered button with pulse
   function drawPrimaryButton(label, cx, cy, w, h, rgb) {
     let pulse = Math.sin(p.frameCount * 0.05) * 5;
     let bw = w + pulse, bh = h + pulse * 0.5;
     p.fill(rgb[0], rgb[1], rgb[2]);
     p.noStroke();
     p.rect(cx - bw/2, cy - bh/2, bw, bh, 8);
-    // Highlight strip
     p.fill(255, 255, 255, 50);
     p.rect(cx - bw/2 + 4, cy - bh/2 + 4, bw - 8, bh/3, 4);
     p.fill(255);
-    p.textFont('Press Start 2P');
+    p.textFont('Bungee');
     p.textSize(13 * FONT_SCALE);
-    p.textStyle(p.BOLD);
     p.text(label, cx, cy);
-    p.textStyle(p.NORMAL);
   }
 
-  // Hit-test for the primary button
   function hitButton(mx, my, cx, cy, w, h) {
     return mx > cx - w/2 - 10 && mx < cx + w/2 + 10 &&
            my > cy - h/2 - 10 && my < cy + h/2 + 10;
@@ -545,7 +662,14 @@ new p5(function(p) {
   }
 
   function drawMaze() {
-    p.stroke(80,80,100); p.strokeWeight(WALL_T); p.noFill();
+    // Level 4 (index 3): white walls; all others: dark gray
+    let wallR, wallG, wallB;
+    if (level === 3) {
+      wallR = 255; wallG = 255; wallB = 255;
+    } else {
+      wallR = 80; wallG = 80; wallB = 100;
+    }
+    p.stroke(wallR, wallG, wallB); p.strokeWeight(WALL_T); p.noFill();
     p.rect(0,HUD_H,CANVAS_W,GAME_H);
     for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
       let x=c*CELL,y=HUD_H+r*CELL;
@@ -567,16 +691,12 @@ new p5(function(p) {
     return {
       col: 0, row: 0,
       x: startX, y: startY,
-      // pixel-level target for the current corridor segment
       targetX: startX, targetY: startY,
-      // which wall-aligned cell the player is "in"
       dir: 'right',
       invincible: false,
       invincibleTimer: 0,
       blinkOn: true,
-      // pending direction from input (used for corridor queuing)
       pendingDir: null,
-      // true while actively gliding toward targetX/targetY
       moving: false,
     };
   }
@@ -594,7 +714,6 @@ new p5(function(p) {
     player.blinkOn = true;
   }
 
-  // Returns the current held direction (highest priority wins)
   function getHeldDir() {
     const dirs = {
       right: p.keyIsDown(p.RIGHT_ARROW) || p.keyIsDown(68),
@@ -616,13 +735,9 @@ new p5(function(p) {
     }
 
     let heldDir = getHeldDir();
-
-    // Store any newly pressed direction as pending so it can be
-    // picked up the moment the player reaches the next grid centre.
     if (heldDir) player.pendingDir = heldDir;
 
     if (!player.moving) {
-      // Try pending direction first, then held direction
       let tryDir = player.pendingDir || heldDir;
       if (tryDir) {
         let dc = tryDir==='right'?1 : tryDir==='left'?-1 : 0;
@@ -636,7 +751,6 @@ new p5(function(p) {
           player.moving = true;
           player.pendingDir = null;
         } else if (tryDir !== heldDir && heldDir) {
-          // pending blocked — try actual held direction
           dc = heldDir==='right'?1 : heldDir==='left'?-1 : 0;
           dr = heldDir==='down' ?1 : heldDir==='up'  ?-1 : 0;
           nr = player.row + dr; nc = player.col + dc;
@@ -657,7 +771,6 @@ new p5(function(p) {
       let dy = player.targetY - player.y;
       let dist = Math.sqrt(dx*dx + dy*dy);
       if (dist <= PLAYER_SPEED) {
-        // Snap to grid centre
         player.x = player.targetX;
         player.y = player.targetY;
         player.moving = false;
@@ -693,7 +806,7 @@ new p5(function(p) {
   }
 
   // ============================================================
-  // MOVEMENT CHECK (wall-based)
+  // MOVEMENT CHECK
   // ============================================================
   function canMove(r,c,nr,nc){
     if(nr<0||nr>=ROWS||nc<0||nc>=COLS)return false;
@@ -736,8 +849,17 @@ new p5(function(p) {
       if(!it.collected&&it.row===player.row&&it.col===player.col){
         it.collected=true;
         Audio.collectItem(i);
+        // Add to HUD collected items with pop animation
+        collectedHUDItems.push({
+          index: i,
+          key: `item${LEVELS[level].char}${String.fromCharCode(97+i)}`,
+          color: ITEM_COLORS[i % ITEM_COLORS.length],
+          popAnim: 12, // frames of pop animation remaining
+        });
       }
     });
+    // Tick down pop animations
+    collectedHUDItems.forEach(h => { if (h.popAnim > 0) h.popAnim--; });
   }
 
   // ============================================================
@@ -768,6 +890,7 @@ new p5(function(p) {
     if(apartment.row===player.row&&apartment.col===player.col){
       phase6='items';
       items=initItems();
+      collectedHUDItems=[];
       initCocktails();
       Audio.apartmentCatch();
     }
@@ -857,33 +980,87 @@ new p5(function(p) {
     p.fill(255,255,255,8);
     for(let y=0;y<HUD_H;y+=4)p.rect(0,y,CANVAS_W,2);
 
+    // Level label (left side)
     p.fill(255,220,80);p.noStroke();p.textSize(8*FONT_SCALE);
     p.textAlign(p.LEFT,p.CENTER);
     p.text(`LVL ${level+1}`,10,HUD_H/2-8);
     p.fill(200,200,255);p.textSize(7*FONT_SCALE);
     p.text(LEVELS[level].label.toUpperCase(),10,HUD_H/2+8);
+    p.textAlign(p.CENTER,p.CENTER);
 
-    let showBar=!(level===5&&phase6==='apartment');
-    if(showBar){
-      let collected=items.filter(it=>it.collected).length,total=items.length;
-      let barW=200,barH=14,barX=CANVAS_W/2-barW/2,barY=HUD_H/2+8;
-      p.textAlign(p.CENTER,p.CENTER);p.fill(180,230,255);p.textSize(7*FONT_SCALE);
-      p.text(`ITEMS: ${collected}/${total}`,CANVAS_W/2,barY-10);
-      p.fill(60,60,80);p.rect(barX-2,barY-2,barW+4,barH+4);
-      p.fill(20,20,35);p.rect(barX,barY,barW,barH);
-      let segW=Math.floor(barW/total)-1;
-      for(let i=0;i<total;i++){
-        let sx=barX+i*(segW+2);
-        if(i<collected){p.fill(80,220,120);p.rect(sx,barY,segW,barH);p.fill(160,255,180);p.rect(sx,barY,segW,3);}
-        else{p.fill(40,40,60);p.rect(sx,barY,segW,barH);p.fill(50,50,75);p.rect(sx,barY,segW,2);}
+    // ---- COLLECTED ITEMS DISPLAY (center HUD) ----
+    let showItemsBar = !(level === 5 && phase6 === 'apartment');
+    if (showItemsBar) {
+      let total = LEVELS[level].items;
+      let lv = LEVELS[level].char;
+
+      // Each collected item slot
+      let slotSz = 28;
+      let gap = 4;
+      let totalW = total * (slotSz + gap) - gap;
+      let startX = CANVAS_W / 2 - totalW / 2;
+      let slotY = HUD_H / 2;
+
+      for (let i = 0; i < total; i++) {
+        let cx = startX + i * (slotSz + gap) + slotSz / 2;
+        let cy = slotY;
+        let isCollected = i < collectedHUDItems.length;
+        let hudItem = collectedHUDItems[i];
+
+        // Pop scale
+        let scl = 1.0;
+        if (isCollected && hudItem && hudItem.popAnim > 0) {
+          let t = 1 - (hudItem.popAnim / 12);
+          scl = 1 + 0.4 * Math.sin(t * Math.PI);
+        }
+
+        let sz = slotSz * scl;
+
+        // Slot background
+        p.fill(30, 30, 50);
+        p.noStroke();
+        p.rect(cx - slotSz/2 - 1, cy - slotSz/2 - 1, slotSz + 2, slotSz + 2, 3);
+
+        if (isCollected && hudItem) {
+          // Draw item image or colored fallback
+          let key = hudItem.key;
+          let col = hudItem.color;
+          if (!drawRaw(p, key, cx, cy, sz, sz)) {
+            let r = parseInt(col.slice(1,3),16);
+            let g2 = parseInt(col.slice(3,5),16);
+            let b = parseInt(col.slice(5,7),16);
+            p.fill(r, g2, b);
+            p.noStroke();
+            p.rect(cx - sz/2, cy - sz/2, sz, sz, 3);
+            p.fill(255, 255, 255, 200);
+            p.textSize(8 * FONT_SCALE);
+            p.text(String.fromCharCode(65 + i), cx, cy);
+          }
+          // Shine overlay
+          p.fill(255, 255, 255, 40);
+          p.noStroke();
+          p.rect(cx - slotSz/2, cy - slotSz/2, slotSz, slotSz/3, 3);
+        } else {
+          // Empty slot — dim dashed border hint
+          p.stroke(60, 60, 80);
+          p.strokeWeight(1);
+          p.noFill();
+          p.rect(cx - slotSz/2, cy - slotSz/2, slotSz, slotSz, 3);
+          p.noStroke();
+          p.fill(40, 40, 60, 180);
+          p.textSize(7 * FONT_SCALE);
+          p.text('?', cx, cy);
+        }
       }
     }
 
+    // NYC apartment phase hint
     if(level===5){
       p.fill(255,180,50);p.textSize(6*FONT_SCALE);p.textAlign(p.CENTER,p.CENTER);
-      let hintY=showBar?(HUD_H/2+8+14+8):HUD_H/2;
+      let hintY = showItemsBar ? (HUD_H/2 + 20) : HUD_H/2;
       p.text(phase6==='apartment'?'> FIND THE APARTMENT <':'> DODGE THE $25 COCKTAILS <',CANVAS_W/2,hintY);
 
+      // Hearts (right side)
       let baseSize=18,startX=CANVAS_W-14,heartY=HUD_H/2;
       if(heartAnim)heartAnim.timer++;
 
@@ -957,15 +1134,24 @@ new p5(function(p) {
   // START LEVEL
   // ============================================================
   function startLevel(lv){
-    level=lv;maze=buildMaze();player=initPlayer();
-    items=initItems();lives=3;phase6='apartment';
-    heartAnim=null;
+    level = lv;
+    maze = buildMaze();
+    player = initPlayer();
+    items = initItems();
+    collectedHUDItems = [];
+    lives = 3;
+    phase6 = 'apartment';
+    heartAnim = null;
     Audio.levelStart();
-    if(LEVELS[lv].extra){
-      warningTimer=180;state='warning';
-      apartment=initApartment();items=[];
-    } else {
-      state='playing';
+
+    // Always show level intro screen first
+    introTimer = 0;
+    state = 'intro';
+
+    if (LEVELS[lv].extra) {
+      apartment = initApartment();
+      items = [];
+      // Warning screen is shown after intro completes
     }
   }
 
