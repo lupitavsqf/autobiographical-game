@@ -5,7 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Item Collector Adventure</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+<style>
+  @font-face {
+    font-family: 'Bungee';
+    src: url('Bungee-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+  }
+</style>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -213,7 +220,7 @@ const Audio = (() => {
 const FONT_SCALE = 2;
 const CANVAS_W = 800;
 const CANVAS_H = 700;
-const HUD_H    = 72;
+const HUD_H    = 88;
 const BOTTOM_H = 28;
 const GAME_H   = CANVAS_H - HUD_H - BOTTOM_H;
 
@@ -248,6 +255,27 @@ const ITEM_COLORS = [
 ];
 
 const COCKTAIL_COLORS = ['#ff6b9d','#c44dff','#ffb347'];
+
+// ============================================================
+// ITEM NAMES — edit these arrays to add names below each HUD slot.
+// Each array corresponds to a level (index 0 = level 1, etc.).
+// Leave a slot as '' (empty string) or the array shorter than the
+// item count to show no name for that slot.
+// ============================================================
+const ITEM_NAMES = [
+  // Level 1 — The Farm (6 items)
+  [], 
+  // Level 2 — High School (7 items)
+  [],
+  // Level 3 — The Lab (6 items)
+  [],
+  // Level 4 — The Office (6 items)
+  [],
+  // Level 5 — China (7 items)
+  [],
+  // Level 6 — New York City (9 items)
+  [],
+];
 
 const PATH = {
   bg:        n     => `background${n}.png`,
@@ -993,13 +1021,15 @@ new p5(function(p) {
     if (showItemsBar) {
       let total = LEVELS[level].items;
       let lv = LEVELS[level].char;
+      let names = ITEM_NAMES[level] || [];
 
       // Each collected item slot
       let slotSz = 28;
       let gap = 4;
       let totalW = total * (slotSz + gap) - gap;
       let startX = CANVAS_W / 2 - totalW / 2;
-      let slotY = HUD_H / 2;
+      // Shift slots upward a bit to leave room for names
+      let slotY = HUD_H / 2 - 8;
 
       for (let i = 0; i < total; i++) {
         let cx = startX + i * (slotSz + gap) + slotSz / 2;
@@ -1051,13 +1081,24 @@ new p5(function(p) {
           p.textSize(7 * FONT_SCALE);
           p.text('?', cx, cy);
         }
+
+        // Name label below slot (only if a non-empty name is defined)
+        let itemName = names[i];
+        if (itemName && itemName.length > 0) {
+          p.noStroke();
+          p.fill(isCollected ? p.color(255, 220, 80) : p.color(120, 120, 150));
+          p.textSize(5 * FONT_SCALE);
+          p.textAlign(p.CENTER, p.TOP);
+          p.text(itemName.toUpperCase(), cx, cy + slotSz / 2 + 3);
+          p.textAlign(p.CENTER, p.CENTER);
+        }
       }
     }
 
     // NYC apartment phase hint
     if(level===5){
       p.fill(255,180,50);p.textSize(6*FONT_SCALE);p.textAlign(p.CENTER,p.CENTER);
-      let hintY = showItemsBar ? (HUD_H/2 + 20) : HUD_H/2;
+      let hintY = showItemsBar ? (HUD_H/2 + 26) : HUD_H/2;
       p.text(phase6==='apartment'?'> FIND THE APARTMENT <':'> DODGE THE $25 COCKTAILS <',CANVAS_W/2,hintY);
 
       // Hearts (right side)
