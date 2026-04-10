@@ -4,11 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Item Collector Adventure</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 <style>
+  @font-face {
+    font-family: 'Bungee';
+    src: url('Bungee-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: #1a1a2e;
@@ -35,7 +39,6 @@
 const Music = (() => {
   let current = null;
   let currentKey = null;
-  // ✅ FIX: only play after a user gesture (GitHub Pages autoplay policy)
   let unlocked = false;
   let pendingKey = null;
 
@@ -43,7 +46,6 @@ const Music = (() => {
     ? (src) => { const a = document.createElement('audio'); a.src = src; return a; }
     : null;
 
-  // Files are in root — NO assets/ prefix needed
   const tracks = {
     home:  'bg_home.mp3',
     farm:  'bg_farm.mp3',
@@ -84,7 +86,6 @@ const Music = (() => {
     currentKey = null;
   }
 
-  // ✅ FIX: called on first click/keydown to unblock audio
   function unlock() {
     if (unlocked) return;
     unlocked = true;
@@ -97,7 +98,7 @@ const Music = (() => {
   function update(state, level) {
     let key = keyForState(state, level);
     if (!unlocked) {
-      pendingKey = key; // queue it; will play on first interaction
+      pendingKey = key;
       return;
     }
     _play(key);
@@ -111,7 +112,6 @@ const Music = (() => {
   return { update, stop, unlock };
 })();
 
-// ✅ FIX: unlock audio on first user gesture (required by browsers on GitHub Pages)
 document.addEventListener('click',   () => Music.unlock(), { once: true });
 document.addEventListener('keydown', () => Music.unlock(), { once: true });
 
@@ -282,7 +282,6 @@ const ITEM_NAMES = [
   [], [], [], [], [], [],
 ];
 
-// Files are all in root — paths have NO prefix
 const PATH = {
   bg:        n     => `background${n}.png`,
   char:      (n,d) => `character${n}${d}.png`,
@@ -341,10 +340,10 @@ function drawRaw(p, key, x, y, w, h, alpha) {
 }
 
 // ============================================================
-// FONT READY GUARD
+// FONT READY GUARD — uses document.fonts.ready for local font
 // ============================================================
 let bungeeReady = false;
-document.fonts.load('1em Bungee').then(() => { bungeeReady = true; });
+document.fonts.ready.then(() => { bungeeReady = true; });
 
 new p5(function(p) {
 
