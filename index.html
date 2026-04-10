@@ -35,15 +35,20 @@
 const Music = (() => {
   let current = null;
   let currentKey = null;
+  // Flag: only start music after first user gesture
+  let unlocked = false;
+  let pendingKey = null;
+
   const HTMLAudio = window.HTMLAudioElement
     ? (src) => { const a = document.createElement('audio'); a.src = src; return a; }
     : null;
 
+  // ✅ FIX: all audio paths now use assets/ prefix
   const tracks = {
-    home:  'bg_home.mp3',
-    farm:  'bg_farm.mp3',
-    mid:   'bg_2-5.mp3',
-    nyc:   'bg_6.mp3',
+    home:  'assets/bg_home.mp3',
+    farm:  'assets/bg_farm.mp3',
+    mid:   'assets/bg_2-5.mp3',
+    nyc:   'assets/bg_6.mp3',
   };
 
   function keyForState(state, level) {
@@ -55,9 +60,9 @@ const Music = (() => {
     return 'home';
   }
 
-  function play(key) {
+  function _play(key) {
     if (key === currentKey && current && !current.paused) return;
-    stop();
+    _stop();
     currentKey = key;
     if (!tracks[key] || !HTMLAudio) return;
     try {
@@ -71,7 +76,7 @@ const Music = (() => {
     }
   }
 
-  function stop() {
+  function _stop() {
     if (current) {
       try { current.pause(); current.currentTime = 0; } catch(e) {}
       current = null;
@@ -79,13 +84,37 @@ const Music = (() => {
     currentKey = null;
   }
 
-  function update(state, level) {
-    let key = keyForState(state, level);
-    play(key);
+  // ✅ FIX: unlock audio on first user gesture, then play any pending track
+  function unlock() {
+    if (unlocked) return;
+    unlocked = true;
+    if (pendingKey) {
+      _play(pendingKey);
+      pendingKey = null;
+    }
   }
 
-  return { update, stop, play };
+  function update(state, level) {
+    let key = keyForState(state, level);
+    if (!unlocked) {
+      // Store the desired track; will play once user interacts
+      pendingKey = key;
+      return;
+    }
+    _play(key);
+  }
+
+  function stop() {
+    _stop();
+    pendingKey = null;
+  }
+
+  return { update, stop, unlock };
 })();
+
+// ✅ FIX: unlock audio on any click or keydown (covers GitHub Pages autoplay restriction)
+document.addEventListener('click',   () => Music.unlock(), { once: true });
+document.addEventListener('keydown', () => Music.unlock(), { once: true });
 
 // ============================================================
 // AUDIO ENGINE (SFX)
@@ -254,13 +283,14 @@ const ITEM_NAMES = [
   [], [], [], [], [], [],
 ];
 
+// ✅ FIX: all image paths now use assets/ prefix
 const PATH = {
-  bg:        n     => `background${n}.png`,
-  char:      (n,d) => `character${n}${d}.png`,
-  item:      (n,l) => `item${n}${l}.png`,
-  apartment: ()    => `apartment.png`,
-  cocktail:  n     => `cocktail${n}.png`,
-  heart:     ()    => `heart.png`,
+  bg:        n     => `assets/background${n}.png`,
+  char:      (n,d) => `assets/character${n}${d}.png`,
+  item:      (n,l) => `assets/item${n}${l}.png`,
+  apartment: ()    => `assets/apartment.png`,
+  cocktail:  n     => `assets/cocktail${n}.png`,
+  heart:     ()    => `assets/heart.png`,
 };
 
 const rawImgs = {};
@@ -273,9 +303,10 @@ function startImagePreload() {
     el.onerror = () => { rawImgs[key] = null; };
     el.src = src;
   }
-  load('bg_home',     'bg_home.png');
-  load('bg_gameover', 'bg_gameover.png');
-  load('bg_won',      'bg_won.png');
+  // ✅ FIX: screen images also use assets/ prefix
+  load('bg_home',     'assets/bg_home.png');
+  load('bg_gameover', 'assets/bg_gameover.png');
+  load('bg_won',      'assets/bg_won.png');
 
   for (let lv = 1; lv <= 6; lv++) {
     load(`bg${lv}`, PATH.bg(lv));
