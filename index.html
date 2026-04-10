@@ -35,7 +35,7 @@
 const Music = (() => {
   let current = null;
   let currentKey = null;
-  // Flag: only start music after first user gesture
+  // ✅ FIX: only play after a user gesture (GitHub Pages autoplay policy)
   let unlocked = false;
   let pendingKey = null;
 
@@ -43,12 +43,12 @@ const Music = (() => {
     ? (src) => { const a = document.createElement('audio'); a.src = src; return a; }
     : null;
 
-  // ✅ FIX: all audio paths now use assets/ prefix
+  // Files are in root — NO assets/ prefix needed
   const tracks = {
-    home:  'assets/bg_home.mp3',
-    farm:  'assets/bg_farm.mp3',
-    mid:   'assets/bg_2-5.mp3',
-    nyc:   'assets/bg_6.mp3',
+    home:  'bg_home.mp3',
+    farm:  'bg_farm.mp3',
+    mid:   'bg_2-5.mp3',
+    nyc:   'bg_6.mp3',
   };
 
   function keyForState(state, level) {
@@ -84,7 +84,7 @@ const Music = (() => {
     currentKey = null;
   }
 
-  // ✅ FIX: unlock audio on first user gesture, then play any pending track
+  // ✅ FIX: called on first click/keydown to unblock audio
   function unlock() {
     if (unlocked) return;
     unlocked = true;
@@ -97,8 +97,7 @@ const Music = (() => {
   function update(state, level) {
     let key = keyForState(state, level);
     if (!unlocked) {
-      // Store the desired track; will play once user interacts
-      pendingKey = key;
+      pendingKey = key; // queue it; will play on first interaction
       return;
     }
     _play(key);
@@ -112,7 +111,7 @@ const Music = (() => {
   return { update, stop, unlock };
 })();
 
-// ✅ FIX: unlock audio on any click or keydown (covers GitHub Pages autoplay restriction)
+// ✅ FIX: unlock audio on first user gesture (required by browsers on GitHub Pages)
 document.addEventListener('click',   () => Music.unlock(), { once: true });
 document.addEventListener('keydown', () => Music.unlock(), { once: true });
 
@@ -283,14 +282,14 @@ const ITEM_NAMES = [
   [], [], [], [], [], [],
 ];
 
-// ✅ FIX: all image paths now use assets/ prefix
+// Files are all in root — paths have NO prefix
 const PATH = {
-  bg:        n     => `assets/background${n}.png`,
-  char:      (n,d) => `assets/character${n}${d}.png`,
-  item:      (n,l) => `assets/item${n}${l}.png`,
-  apartment: ()    => `assets/apartment.png`,
-  cocktail:  n     => `assets/cocktail${n}.png`,
-  heart:     ()    => `assets/heart.png`,
+  bg:        n     => `background${n}.png`,
+  char:      (n,d) => `character${n}${d}.png`,
+  item:      (n,l) => `item${n}${l}.png`,
+  apartment: ()    => `apartment.png`,
+  cocktail:  n     => `cocktail${n}.png`,
+  heart:     ()    => `heart.png`,
 };
 
 const rawImgs = {};
@@ -303,10 +302,9 @@ function startImagePreload() {
     el.onerror = () => { rawImgs[key] = null; };
     el.src = src;
   }
-  // ✅ FIX: screen images also use assets/ prefix
-  load('bg_home',     'assets/bg_home.png');
-  load('bg_gameover', 'assets/bg_gameover.png');
-  load('bg_won',      'assets/bg_won.png');
+  load('bg_home',     'bg_home.png');
+  load('bg_gameover', 'bg_gameover.png');
+  load('bg_won',      'bg_won.png');
 
   for (let lv = 1; lv <= 6; lv++) {
     load(`bg${lv}`, PATH.bg(lv));
@@ -370,7 +368,6 @@ new p5(function(p) {
     p.frameRate(60);
   };
 
-  // Set font every frame, falling back gracefully until loaded
   function setFont() {
     try {
       p.textFont(bungeeReady ? 'Bungee' : 'monospace');
