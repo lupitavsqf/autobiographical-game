@@ -4,15 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Item Collector Adventure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-<style>
-  @font-face {
-    font-family: 'Bungee';
-    src: url('Bungee-Regular.ttf') format('truetype');
-    font-weight: normal;
-    font-style: normal;
-  }
-</style>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -69,7 +64,6 @@ const Music = (() => {
       current = HTMLAudio(tracks[key]);
       current.loop = true;
       current.volume = 0.45;
-      // If the file is missing, onerror fires — just stay silent
       current.onerror = () => { current = null; };
       current.play().catch(() => {});
     } catch(e) {
@@ -256,25 +250,8 @@ const ITEM_COLORS = [
 
 const COCKTAIL_COLORS = ['#ff6b9d','#c44dff','#ffb347'];
 
-// ============================================================
-// ITEM NAMES — edit these arrays to add names below each HUD slot.
-// Each array corresponds to a level (index 0 = level 1, etc.).
-// Leave a slot as '' (empty string) or the array shorter than the
-// item count to show no name for that slot.
-// ============================================================
 const ITEM_NAMES = [
-  // Level 1 — The Farm (6 items)
-  [], 
-  // Level 2 — High School (7 items)
-  [],
-  // Level 3 — The Lab (6 items)
-  [],
-  // Level 4 — The Office (6 items)
-  [],
-  // Level 5 — China (7 items)
-  [],
-  // Level 6 — New York City (9 items)
-  [],
+  [], [], [], [], [], [],
 ];
 
 const PATH = {
@@ -334,6 +311,12 @@ function drawRaw(p, key, x, y, w, h, alpha) {
   } catch(e) { return false; }
 }
 
+// ============================================================
+// FONT READY GUARD
+// ============================================================
+let bungeeReady = false;
+document.fonts.load('1em Bungee').then(() => { bungeeReady = true; });
+
 new p5(function(p) {
 
   let state  = 'menu';
@@ -341,11 +324,9 @@ new p5(function(p) {
   let maze, player, items, apartment, cocktails, lives, warningTimer;
   let phase6 = 'apartment';
   let heartAnim = null;
-  // Level intro screen
   let introTimer = 0;
-  const INTRO_DURATION = 180; // 3 seconds at 60fps
+  const INTRO_DURATION = 180;
 
-  // Collected item thumbnails for HUD: array of {index, key, color, popAnim}
   let collectedHUDItems = [];
 
   p.preload = function() {};
@@ -356,11 +337,20 @@ new p5(function(p) {
     p.imageMode(p.CENTER);
     p.textAlign(p.CENTER, p.CENTER);
     p.frameRate(60);
-    p.textFont('Bungee');
   };
+
+  // Set font every frame, falling back gracefully until loaded
+  function setFont() {
+    try {
+      p.textFont(bungeeReady ? 'Bungee' : 'monospace');
+    } catch(e) {
+      p.textFont('monospace');
+    }
+  }
 
   p.draw = function() {
     p.background(30);
+    setFont();
     Music.update(state, level);
 
     if      (state === 'menu')       drawMenu();
@@ -397,42 +387,33 @@ new p5(function(p) {
   // LEVEL INTRO SCREEN
   // ============================================================
   function drawIntro() {
-    // Background: use level's bg image or colored bg
     drawFancyBg(level);
-
-    // Dark overlay
     p.fill(0, 0, 0, 180); p.noStroke(); p.rect(0, 0, CANVAS_W, CANVAS_H);
 
     let lv = LEVELS[level];
     let progress = introTimer / INTRO_DURATION;
 
-    // Slide-in animation: elements appear sequentially
     let fade1 = Math.min(1, introTimer / 30);
     let fade2 = Math.min(1, Math.max(0, (introTimer - 30) / 30));
     let fade3 = Math.min(1, Math.max(0, (introTimer - 60) / 30));
 
-    // Level number — top accent
     p.fill(255, 220, 80, 255 * fade1);
     p.noStroke();
     p.textSize(11 * FONT_SCALE);
     p.text(`LEVEL ${level + 1}`, CANVAS_W/2, CANVAS_H/2 - 100);
 
-    // Decorative line
     let lineW = 300 * fade1;
     p.stroke(255, 220, 80, 180 * fade1);
     p.strokeWeight(2);
     p.line(CANVAS_W/2 - lineW/2, CANVAS_H/2 - 82, CANVAS_W/2 + lineW/2, CANVAS_H/2 - 82);
     p.noStroke();
 
-    // Life stage (e.g. CHILDHOOD)
     p.fill(180, 230, 255, 255 * fade2);
     p.textSize(10 * FONT_SCALE);
     p.text(lv.life, CANVAS_W/2, CANVAS_H/2 - 44);
 
-    // Location — big title
     p.fill(255, 255, 255, 255 * fade3);
     p.textSize(32 * FONT_SCALE);
-    // Slight scale pop on entry
     let scl = 1 + (1 - fade3) * 0.15;
     p.push();
     p.translate(CANVAS_W/2, CANVAS_H/2 + 20);
@@ -441,7 +422,6 @@ new p5(function(p) {
     p.text(lv.location, 0, 0);
     p.pop();
 
-    // Bottom countdown dots
     let dots = Math.ceil((1 - progress) * 3);
     p.fill(255, 255, 255, 120 * fade3);
     p.textSize(9 * FONT_SCALE);
@@ -449,7 +429,6 @@ new p5(function(p) {
 
     introTimer++;
     if (introTimer >= INTRO_DURATION) {
-      // For NYC level, show warning screen; otherwise go straight to playing
       if (LEVELS[level].extra) {
         warningTimer = 180;
         state = 'warning';
@@ -580,7 +559,6 @@ new p5(function(p) {
     p.fill(255, 255, 255, 50);
     p.rect(cx - bw/2 + 4, cy - bh/2 + 4, bw - 8, bh/3, 4);
     p.fill(255);
-    p.textFont('Bungee');
     p.textSize(13 * FONT_SCALE);
     p.text(label, cx, cy);
   }
@@ -690,7 +668,6 @@ new p5(function(p) {
   }
 
   function drawMaze() {
-    // Level 4 (index 3): white walls; all others: dark gray
     let wallR, wallG, wallB;
     if (level === 3) {
       wallR = 255; wallG = 255; wallB = 255;
@@ -711,7 +688,7 @@ new p5(function(p) {
   }
 
   // ============================================================
-  // PLAYER — smooth continuous movement
+  // PLAYER
   // ============================================================
   function initPlayer() {
     let startX = CELL / 2;
@@ -877,16 +854,14 @@ new p5(function(p) {
       if(!it.collected&&it.row===player.row&&it.col===player.col){
         it.collected=true;
         Audio.collectItem(i);
-        // Add to HUD collected items with pop animation
         collectedHUDItems.push({
           index: i,
           key: `item${LEVELS[level].char}${String.fromCharCode(97+i)}`,
           color: ITEM_COLORS[i % ITEM_COLORS.length],
-          popAnim: 12, // frames of pop animation remaining
+          popAnim: 12,
         });
       }
     });
-    // Tick down pop animations
     collectedHUDItems.forEach(h => { if (h.popAnim > 0) h.popAnim--; });
   }
 
@@ -1008,7 +983,6 @@ new p5(function(p) {
     p.fill(255,255,255,8);
     for(let y=0;y<HUD_H;y+=4)p.rect(0,y,CANVAS_W,2);
 
-    // Level label (left side)
     p.fill(255,220,80);p.noStroke();p.textSize(8*FONT_SCALE);
     p.textAlign(p.LEFT,p.CENTER);
     p.text(`LVL ${level+1}`,10,HUD_H/2-8);
@@ -1016,19 +990,16 @@ new p5(function(p) {
     p.text(LEVELS[level].label.toUpperCase(),10,HUD_H/2+8);
     p.textAlign(p.CENTER,p.CENTER);
 
-    // ---- COLLECTED ITEMS DISPLAY (center HUD) ----
     let showItemsBar = !(level === 5 && phase6 === 'apartment');
     if (showItemsBar) {
       let total = LEVELS[level].items;
       let lv = LEVELS[level].char;
       let names = ITEM_NAMES[level] || [];
 
-      // Each collected item slot
       let slotSz = 28;
       let gap = 4;
       let totalW = total * (slotSz + gap) - gap;
       let startX = CANVAS_W / 2 - totalW / 2;
-      // Shift slots upward a bit to leave room for names
       let slotY = HUD_H / 2 - 8;
 
       for (let i = 0; i < total; i++) {
@@ -1037,7 +1008,6 @@ new p5(function(p) {
         let isCollected = i < collectedHUDItems.length;
         let hudItem = collectedHUDItems[i];
 
-        // Pop scale
         let scl = 1.0;
         if (isCollected && hudItem && hudItem.popAnim > 0) {
           let t = 1 - (hudItem.popAnim / 12);
@@ -1046,13 +1016,11 @@ new p5(function(p) {
 
         let sz = slotSz * scl;
 
-        // Slot background
         p.fill(30, 30, 50);
         p.noStroke();
         p.rect(cx - slotSz/2 - 1, cy - slotSz/2 - 1, slotSz + 2, slotSz + 2, 3);
 
         if (isCollected && hudItem) {
-          // Draw item image or colored fallback
           let key = hudItem.key;
           let col = hudItem.color;
           if (!drawRaw(p, key, cx, cy, sz, sz)) {
@@ -1066,12 +1034,10 @@ new p5(function(p) {
             p.textSize(8 * FONT_SCALE);
             p.text(String.fromCharCode(65 + i), cx, cy);
           }
-          // Shine overlay
           p.fill(255, 255, 255, 40);
           p.noStroke();
           p.rect(cx - slotSz/2, cy - slotSz/2, slotSz, slotSz/3, 3);
         } else {
-          // Empty slot — dim dashed border hint
           p.stroke(60, 60, 80);
           p.strokeWeight(1);
           p.noFill();
@@ -1082,7 +1048,6 @@ new p5(function(p) {
           p.text('?', cx, cy);
         }
 
-        // Name label below slot (only if a non-empty name is defined)
         let itemName = names[i];
         if (itemName && itemName.length > 0) {
           p.noStroke();
@@ -1095,13 +1060,11 @@ new p5(function(p) {
       }
     }
 
-    // NYC apartment phase hint
     if(level===5){
       p.fill(255,180,50);p.textSize(6*FONT_SCALE);p.textAlign(p.CENTER,p.CENTER);
       let hintY = showItemsBar ? (HUD_H/2 + 26) : HUD_H/2;
       p.text(phase6==='apartment'?'> FIND THE APARTMENT <':'> DODGE THE $25 COCKTAILS <',CANVAS_W/2,hintY);
 
-      // Hearts (right side)
       let baseSize=18,startX=CANVAS_W-14,heartY=HUD_H/2;
       if(heartAnim)heartAnim.timer++;
 
@@ -1185,14 +1148,12 @@ new p5(function(p) {
     heartAnim = null;
     Audio.levelStart();
 
-    // Always show level intro screen first
     introTimer = 0;
     state = 'intro';
 
     if (LEVELS[lv].extra) {
       apartment = initApartment();
       items = [];
-      // Warning screen is shown after intro completes
     }
   }
 
