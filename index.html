@@ -4,11 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Item Collector Adventure</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 <style>
+  @font-face {
+    font-family: 'Bungee';
+    src: url('Bungee-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: #1a1a2e;
@@ -24,7 +27,6 @@
     border-radius: 8px;
     box-shadow: 0 0 40px rgba(0,0,0,0.8);
   }
-  /* Hidden element forces the browser to actually download Bungee */
   #font-preload {
     position: absolute;
     visibility: hidden;
@@ -40,22 +42,15 @@
 <script>
 // ============================================================
 // WAIT FOR BUNGEE FONT, THEN BOOT GAME
-// The entire game lives inside initGame() so p5 is only created
-// after document.fonts.load() confirms Bungee is ready.
-// This is the fix that makes it work identically on GitHub Pages.
+// Uses self-hosted Bungee-Regular.ttf so it works on GitHub Pages
 // ============================================================
 (function bootGame() {
   var fontPromise = document.fonts
-    ? document.fonts.load('bold 16px Bungee', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')
+    ? document.fonts.load('16px Bungee', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')
     : Promise.resolve();
 
   fontPromise.then(function() {
-    var loaded = document.fonts ? document.fonts.check('bold 16px Bungee') : false;
-    if (!loaded) {
-      requestAnimationFrame(initGame);
-    } else {
-      initGame();
-    }
+    initGame();
   }).catch(function() {
     initGame();
   });
