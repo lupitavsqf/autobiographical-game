@@ -6,12 +6,6 @@
 <title>Item Collector Adventure</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 <style>
-  @font-face {
-    font-family: 'Bungee';
-    src: url('Bungee-Regular.ttf') format('truetype');
-    font-weight: normal;
-    font-style: normal;
-  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: #1a1a2e;
@@ -27,31 +21,26 @@
     border-radius: 8px;
     box-shadow: 0 0 40px rgba(0,0,0,0.8);
   }
-  #font-preload {
-    position: absolute;
-    visibility: hidden;
-    font-family: 'Bungee', monospace;
-    font-size: 1px;
-  }
 </style>
 </head>
 <body>
-<div id="font-preload">.</div>
 <div id="game-container"></div>
 
 <script>
 // ============================================================
-// WAIT FOR BUNGEE FONT, THEN BOOT GAME
-// Uses self-hosted Bungee-Regular.ttf so it works on GitHub Pages
+// LOAD BUNGEE FONT VIA FontFace API, THEN BOOT GAME
 // ============================================================
 (function bootGame() {
-  var fontPromise = document.fonts
-    ? document.fonts.load('16px Bungee', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')
-    : Promise.resolve();
+  const font = new FontFace('Bungee', 'url(Bungee-Regular.ttf)', {
+    style: 'normal',
+    weight: 'normal'
+  });
 
-  fontPromise.then(function() {
+  font.load().then(function(loadedFont) {
+    document.fonts.add(loadedFont);
     initGame();
-  }).catch(function() {
+  }).catch(function(err) {
+    console.warn('Bungee font failed to load, starting anyway:', err);
     initGame();
   });
 })();
@@ -334,7 +323,7 @@ new p5(function(p) {
 
   p.draw = function() {
     p.background(30);
-    p.textFont('Bungee');   // re-applied every frame — never drops back to system font
+    p.textFont('Bungee');
     Music.update(state, level);
 
     if      (state === 'menu')       drawMenu();
